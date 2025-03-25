@@ -85,7 +85,7 @@ def test_for_pep_vocab():
     test_data = vocab.split_seq(test_data)
     test_data_batch = vocab.split_seq(test_data_batch)
     
-    vocab.add_special_token(['<SOS>', '<EOS>'])
+    # vocab.add_special_token(['<SOS>', '<EOS>'])
     test_data_idx = vocab[test_data]
     test_data_batch_idx = vocab[test_data_batch]
     print(test_data_idx)

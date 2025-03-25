@@ -1,4 +1,5 @@
 from torch.optim import Adam
+import torch
 
 from src.data.DataManage import DataManage
 from src.models.model import make_model
@@ -12,7 +13,9 @@ class Task:
     
     def initialize(self):
         '''导入模型和数据'''
-        self.model = make_model(2, 25, 2)
+        self.model = make_model(self.cfg.model.input_dim, self.cfg.model.output_dim, 
+                                self.cfg.model.num_layers, self.cfg.model.d_model,
+                                self.cfg.model.d_ff, self.cfg.model.n_heads, self.cfg.model.dropout)
         
         self.loss_fn = Loss('CrossEntropyLoss')
         self.opt = Adam(self.model.parameters(), lr=self.cfg.train.lr)
@@ -29,6 +32,8 @@ class Task:
         for epoch in range(self.cfg.train.num_epochs):
             for i, (spectrum, precursor_mz, precursor_charge, peptide) in enumerate(self.train_data_loader):
                 print(i, spectrum.shape, precursor_mz.shape, precursor_charge.shape, peptide.shape)
+                mz = spectrum[:, :, 0]
+                self.model.update_mz(mz)
                 output = self.model(spectrum)
                 print(output.shape)
                 loss = self.loss_fn(output, peptide)

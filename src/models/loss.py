@@ -1,4 +1,6 @@
+import torch
 import torch.nn.functional as F
+from collections import Counter
 
 
 class Loss:
@@ -22,5 +24,13 @@ class Loss:
             output = output.view(-1, output.size(2))
         if len(target.shape) == 2:
             target = target.view(-1)
-            
-        return F.cross_entropy(output, target)
+        
+        mask = (target != 0)
+        class_counts = Counter(target.tolist())
+        weights = torch.ones(27)
+        weights[0] = 0.001
+        # weights = torch.tensor([1 + 1 / class_counts[i]**2 if i in class_counts else 1 for i in range(27)])
+        loss = F.cross_entropy(output, target, weight=weights, reduction='none')
+        
+        # loss = loss[mask]
+        return loss.mean()

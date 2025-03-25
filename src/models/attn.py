@@ -11,7 +11,7 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(tensor, sin, cos):
     # 应用旋转位置编码：tensor * cos + rotate_half(tensor) * sin
-    return (tensor * cos) + (rotate_half(tensor) * sin)
+    return (tensor * cos.unsqueeze(1)) + (rotate_half(tensor) * sin.unsqueeze(1))
 
 class RoPEAttention(nn.Module):
     def __init__(self, d_model, max_seq_len=512):
@@ -21,11 +21,23 @@ class RoPEAttention(nn.Module):
         theta = 1.0 / (10000 ** (torch.arange(0, d_model, 2).float() / d_model))
         self.register_buffer('theta', theta)
         
+        self.mz = None
+        self.IS_UPDATE = False
+        
+    def update_mz(self, mz):
+        self.mz = mz
+        self.IS_UPDATE = True
+        
+    def reset(self):
+        self.mz = None
+        self.IS_UPDATE = False
+        
     def get_rotary_matrix(self, seq_len):
         # 生成位置m的sin和cos值
-        m = torch.arange(seq_len, device=self.theta.device)
+        # m = torch.arange(seq_len, device=self.theta.device)
+        m = self.mz
         # 构造频率矩阵：m * theta
-        freqs = torch.einsum('i,j->ij', m, self.theta)
+        freqs = torch.einsum('ij,k->ijk', m, self.theta)
         # 生成sin和cos
         sin, cos = torch.sin(freqs), torch.cos(freqs)
         # 扩展维度以匹配输入形状 [seq_len, d_model]
@@ -34,6 +46,8 @@ class RoPEAttention(nn.Module):
         return sin, cos
     
     def forward(self, q, k):
+        assert self.IS_UPDATE == True, "Please update mz first."
+        
         batch_size, head, seq_len, d_model = q.shape
         sin, cos = self.get_rotary_matrix(seq_len)
         # 应用旋转位置编码
@@ -44,16 +58,6 @@ class RoPEAttention(nn.Module):
         scores = torch.matmul(q_rot, k_rot.transpose(-2, -1))
         return scores
     
-def attention(query, key, value, mask=None, dropout=None):
-    d_model = query.size(-1)
-    rope = RoPEAttention(d_model)
-    scores = rope(query, key)
-    if mask is not None:
-        scores = scores.masked_fill(mask == 0, -1e9)
-    p_attn = F.softmax(scores, dim = -1)
-    if dropout is not None:
-        p_attn = dropout(p_attn)
-    return torch.matmul(p_attn, value), p_attn
 
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
@@ -67,8 +71,11 @@ class MultiHeadedAttention(nn.Module):
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
         
+        self.rope = RoPEAttention(d_model//h)
+    
+        
     def forward(self, query, key, value, mask=None):
-        "Implements Figure 2"
+        
         if mask is not None:
             # 相同的mask适应所有的head.
             mask = mask.unsqueeze(1)
@@ -80,11 +87,24 @@ class MultiHeadedAttention(nn.Module):
              for l, x in zip(self.linears, (query, key, value))]
         
         # 2) 使用attention函数计算scaled-Dot-product-attention 
-        x, self.attn = attention(query, key, value, mask=mask, 
+        x, self.attn = self.attention(query, key, value, mask=mask, 
                                  dropout=self.dropout)
         
         # 3) 实现Multi-head attention，用view函数把8个head的64维向量拼接成一个512的向量。
         #然后再使用一个线性变换(512,521)，shape不变. 
         x = x.transpose(1, 2).contiguous() \
              .view(nbatches, -1, self.h * self.d_k)
+        
+        
         return self.linears[-1](x)
+    
+    
+    def attention(self, query, key, value, mask=None, dropout=None):
+        
+        scores = self.rope(query, key)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, -1e9)
+        p_attn = F.softmax(scores, dim = -1)
+        if dropout is not None:
+            p_attn = dropout(p_attn)
+        return torch.matmul(p_attn, value), p_attn

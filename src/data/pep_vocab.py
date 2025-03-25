@@ -3,13 +3,15 @@ import re
 class PepVocab:
     def __init__(self):
         self.token_to_idx = { 
-            '<MASK>': -1, '<PAD>': 0, 'A': 1, 'C': 2, 'E': 3, 'D': 4, 'F': 5, 'I': 6, 'H': 7,
+            '<PAD>': 0, 'A': 1, 'C': 2, 'E': 3, 'D': 4, 'F': 5, 'I': 6, 'H': 7,
             'K': 8, 'M': 9, 'L': 10, 'N': 11, 'Q': 12, 'P': 13, 'S': 14,
-            'R': 15, 'T': 16, 'W': 17, 'V': 18, 'Y': 19, 'G': 20, 'O': 21, 'U': 22, 'Z': 23, 'X': 24}
+            'R': 15, 'T': 16, 'W': 17, 'V': 18, 'Y': 19, 'G': 20, 'O': 21, 'U': 22,
+            'Z': 23, 'X': 24, '<SOS>': 25, '<EOS>': 26}
         self.idx_to_token = { 
-            -1: '<MASK>', 0: '<PAD>', 1: 'A', 2: 'C', 3: 'E', 4: 'D', 5: 'F', 6: 'I', 7: 'H',
+            0: '<PAD>', 1: 'A', 2: 'C', 3: 'E', 4: 'D', 5: 'F', 6: 'I', 7: 'H',
             8: 'K', 9: 'M', 10: 'L', 11: 'N', 12: 'Q', 13: 'P', 14: 'S',
-            15: 'R', 16: 'T', 17: 'W', 18: 'V', 19: 'Y', 20: 'G', 21: 'O', 22: 'U', 23: 'Z', 24: 'X'}
+            15: 'R', 16: 'T', 17: 'W', 18: 'V', 19: 'Y', 20: 'G', 21: 'O', 22: 'U', 
+            23: 'Z', 24: 'X', 25: '<SOS>', 26: '<EOS>'}
         
         self.get_attention_mask = False
         self.attention_mask = []
@@ -30,7 +32,17 @@ class PepVocab:
         if not isinstance(tokens, (list, tuple)):
             # return self.token_to_idx.get(tokens)
             return self.token_to_idx[tokens]
-        return [self.__getitem__(token) for token in tokens]
+        
+        if isinstance(tokens, list):
+            if isinstance(tokens[0], str):
+                return [self.token_to_idx['<SOS>']] + [self[token] for token in tokens] + [self.token_to_idx['<EOS>']]
+            elif isinstance(tokens[0], (list, tuple)):
+                return [self[token] for token in tokens]
+        
+        if isinstance(tokens, (list[list], tuple)):
+            return [self.__getitem__(token) for token in tokens]
+            
+        
     
     def to_tokens(self, indices):
         '''

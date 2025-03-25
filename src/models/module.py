@@ -91,17 +91,42 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
         
         # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) *
-                             -(math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
+        # pe = torch.zeros(max_len, d_model)
+        # position = torch.arange(0, max_len).unsqueeze(1)
+        # div_term = torch.exp(torch.arange(0, d_model, 2) *
+        #                      -(math.log(10000.0) / d_model))
+        # pe[:, 0::2] = torch.sin(position * div_term)
+        # pe[:, 1::2] = torch.cos(position * div_term)
+        # pe = pe.unsqueeze(0)
+        # self.register_buffer('pe', pe)
+        self.mz = None
+        self.IS_UPDATE = False
+        
+    def update_mz(self, mz):
+        self.mz = mz
+        self.IS_UPDATE = True
+    
+    def reset(self):
+        self.IS_UPDATE = False
+        self.mz = None
         
     def forward(self, x):
-        x = x + self.pe[:, :x.size(1)].clone().detach()
+        
+        assert self.mz is not None, "请先更新mz"
+        
+        pe = torch.zeros_like(x)
+        div_term = torch.exp(torch.arange(0, pe.size(1), 2) *
+                             -(math.log(10000.0) / pe.size(2)))
+        # 每个峰的位置上，对所有特征d_model都加上同样的值
+        pos = self.mz[:, 0::2]
+        pe[:, 0::2, :] = torch.sin(pos * div_term[:pos.size(1)]).unsqueeze(2).expand(-1, -1, pe.size(2))
+        pos = self.mz[:, 1::2]
+        pe[:, 1::2, :] = torch.cos(pos * div_term[:pos.size(1)]).unsqueeze(2).expand(-1, -1, pe.size(2))
+        
+        x = x + pe.clone().detach()
+        
+        self.reset()
+        
         return self.dropout(x)
 
 class Generator(nn.Module):

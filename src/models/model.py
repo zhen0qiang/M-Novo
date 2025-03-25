@@ -20,7 +20,7 @@ class Transfomer(nn.Module):
         # 输入和输出的embedding
         self.src_embed = src_embed  
 
-        self.generator = generator  
+        self.generator = generator
         
     def forward(self, src, src_mask=None):
         #接收并处理屏蔽src和目标序列，
@@ -32,6 +32,12 @@ class Transfomer(nn.Module):
     def encode(self, src, src_mask):
         #传入参数包括src的embedding和src_mask
         return self.encoder(self.src_embed(src), src_mask)
+    
+    def update_mz(self, mz):
+        for encoder_layer in self.encoder.layers:
+            encoder_layer.self_attn.rope.update_mz(mz)
+        
+        self.src_embed[1].update_mz(mz)
 
 def make_model(src_vocab,tgt_vocab,N=6,d_model=512, d_ff=2048, h=8, dropout=0.1):
     "构建模型"
